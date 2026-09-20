@@ -1,0 +1,253 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>疫苗稳定性试验编排平台</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #fff; --ink: #1f2933; --muted: #6b7684;
+    --line: #e3e8ee; --brand: #14568c; --brand-soft: #e8f1f8;
+    --ok: #1a7f4f; --ok-bg: #e6f4ec;
+    --warn: #b45309; --warn-bg: #fdf3e3;
+    --bad: #b42318; --bad-bg: #fdeceb;
+    --freeze: #6d28d9; --freeze-bg: #f1eafe;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+         background: var(--bg); color: var(--ink); font-size: 14px; }
+  header { background: var(--brand); color:#fff; padding: 12px 24px; display:flex;
+           align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; font-weight:600; }
+  header .sp { flex:1; }
+  header input, header button { font-size:13px; padding:6px 10px; border-radius:6px;
+           border:1px solid #c5d3e0; }
+  header input { width:120px; }
+  header button { background:#fff; color:var(--brand); border:none; cursor:pointer; font-weight:600; }
+  main { max-width:1280px; margin:20px auto; padding:0 20px 60px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .stat .n { font-size:26px; font-weight:700; }
+  .stat .l { color:var(--muted); margin-top:2px; }
+  .stat.warn .n { color:var(--warn); } .stat.bad .n { color:var(--bad); }
+  .stat.freeze .n { color:var(--freeze); } .stat.ok .n { color:var(--ok); }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+           margin-bottom:18px; overflow:hidden; }
+  section.card > h2 { font-size:15px; margin:0; padding:12px 16px; border-bottom:1px solid var(--line);
+           display:flex; align-items:center; gap:10px; }
+  section.card > h2 small { color:var(--muted); font-weight:400; }
+  .tabs { display:flex; gap:8px; padding:10px 16px 0; flex-wrap:wrap; }
+  .tabs button { border:1px solid var(--line); background:#fff; padding:6px 14px; border-radius:20px;
+           cursor:pointer; font-size:13px; }
+  .tabs button.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 16px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; background:#fafbfc; }
+  tr:last-child td { border-bottom:none; }
+  .tag { display:inline-block; padding:2px 9px; border-radius:11px; font-size:12px; white-space:nowrap; }
+  .tag.pending { background:#eef1f4; color:#475467; }
+  .tag.pulled  { background:var(--ok-bg); color:var(--ok); }
+  .tag.frozen  { background:var(--freeze-bg); color:var(--freeze); }
+  .tag.void    { background:var(--bad-bg); color:var(--bad); }
+  .tag.overdue { background:var(--warn-bg); color:var(--warn); }
+  .tag.included { background:var(--ok-bg); color:var(--ok); }
+  .tag.excluded { background:var(--bad-bg); color:var(--bad); }
+  .tag.additional,.tag.pending_review { background:var(--warn-bg); color:var(--warn); }
+  .timeline { padding:8px 16px 14px; }
+  .tl-row { display:grid; grid-template-columns:70px 1fr; gap:12px; padding:8px 0;
+            border-bottom:1px dashed var(--line); }
+  .tl-row:last-child { border-bottom:none; }
+  .tl-code { font-weight:700; }
+  .tl-body .meta { color:var(--muted); font-size:12px; margin-top:3px; }
+  .tl-tags { margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; }
+  .early { color:var(--warn); } .late { color:var(--bad); }
+  .repl { background:#f6f8fb; border-left:3px solid var(--brand); padding:6px 10px;
+          border-radius:0 6px 6px 0; margin-top:6px; font-size:13px; }
+  .muted { color:var(--muted); }
+  .hint { padding:20px 16px; color:var(--muted); }
+  code { background:#f1f4f8; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🦠 疫苗稳定性试验编排平台</h1>
+  <span class="sp"></span>
+  <input id="token" placeholder="API Token" size="34">
+  <button onclick="login()">登录</button>
+  <span id="who" class="muted" style="color:#cfe0ee"></span>
+</header>
+<main>
+  <div class="grid">
+    <div class="stat" id="st-batches"><div class="n">–</div><div class="l">在研批次</div></div>
+    <div class="stat warn" id="st-overdue"><div class="n">–</div><div class="l">逾期待取样动作</div></div>
+    <div class="stat freeze" id="st-frozen"><div class="n">–</div><div class="l">冻结待评估结果</div></div>
+    <div class="stat ok" id="st-usable"><div class="n">–</div><div class="l">趋势分析可用数据点</div></div>
+  </div>
+
+  <section class="card">
+    <h2>⏱ 批次时间轴 <small>计划时间 / 实际取样时间分列显示，逾期、冻结、替代来源可见</small></h2>
+    <div class="tabs" id="batch-tabs"></div>
+    <div class="timeline" id="timeline"><div class="hint">请输入 Token 登录（演示账号 coord_zhang / analyst_li / qa_wang，密码 demo1234，可用 <code>python manage.py seed_demo</code> 查看 Token）</div></div>
+  </section>
+
+  <section class="card">
+    <h2>⚠️ 偏离暴露与影响评估 <small>断电等箱体事件下各样品暴露时长及 QA 结论</small></h2>
+    <table>
+      <thead><tr><th>样品</th><th>批次</th><th>箱体</th><th>事件</th><th>暴露时长</th>
+        <th>暴露区间</th><th>QA 评估</th></tr></thead>
+      <tbody id="exposures"></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>📈 当前可用于货架期趋势分析的数据集 <small>仅含 QA 纳入且未冻结的结果；实际取样偏差如实保留</small></h2>
+    <table>
+      <thead><tr><th>批号</th><th>时间点</th><th>动作类型</th><th>检测项</th><th>结果</th>
+        <th>计划时间</th><th>实际取样时间</th><th>偏差(小时)</th></tr></thead>
+      <tbody id="trend"></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+const API = "/api/";
+let auth = localStorage.getItem("stab_token") || "";
+document.getElementById("token").value = auth;
+
+async function get(path) {
+  const r = await fetch(API + path, { headers: { Authorization: "Token " + auth } });
+  if (r.status === 401) throw new Error("未授权：请检查 Token");
+  if (!r.ok) throw new Error((await r.json()).detail || r.status);
+  return r.json();
+}
+function fmt(x) { return x ? x.replace("T", " ").slice(0, 16) : "—"; }
+function esc(s) { return String(s ?? "").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function tag(cls, text) { return `<span class="tag ${cls}">${esc(text)}</span>`; }
+function mins(m) { return `${Math.floor(m/60)}小时${m%60}分`; }
+const KIND = { scheduled:"计划", replacement:"替代", extra:"追加" };
+
+async function login() {
+  auth = document.getElementById("token").value.trim();
+  localStorage.setItem("stab_token", auth);
+  await load();
+}
+
+async function load() {
+  if (!auth) return;
+  const [me, batches, overdue, frozenRes, trend, exposures] = await Promise.all([
+    get("me/"), get("batches/"), get("actions-overdue/"),
+    get("results/?frozen=true"), get("trend-dataset/"), get("exposures/"),
+  ]);
+  document.getElementById("who").textContent =
+    `${me.username} · ${ {coordinator:"协调员",analyst:"分析员",qa:"质量人员"}[me.role] || me.role }`;
+
+  document.getElementById("st-batches").querySelector(".n").textContent = batches.length;
+  document.getElementById("st-overdue").querySelector(".n").textContent = overdue.length;
+  document.getElementById("st-frozen").querySelector(".n").textContent = frozenRes.length;
+  document.getElementById("st-usable").querySelector(".n").textContent = trend.count;
+
+  // 批次 tabs + 时间轴
+  const tabs = document.getElementById("batch-tabs");
+  tabs.innerHTML = "";
+  batches.forEach((b, i) => {
+    const btn = document.createElement("button");
+    btn.textContent = `${b.batch_no}（${b.manufacturing_date} 零点）`;
+    btn.onclick = () => showTimeline(b.id, btn);
+    tabs.appendChild(btn);
+    if (i === 0) setTimeout(() => btn.click(), 0);
+  });
+
+  // 暴露表
+  document.getElementById("exposures").innerHTML = exposures.length ? exposures.map(e => `
+    <tr>
+      <td><code>${esc(e.sample_barcode)}</code></td>
+      <td>${esc(e.batch_no)}</td>
+      <td>${esc(e.chamber_code)}</td>
+      <td>${esc(e.event_type)}<div class="muted">${fmt(e.exposure_started_at)} 起</div></td>
+      <td><b>${mins(e.minutes_exposed)}</b></td>
+      <td class="muted">${fmt(e.exposure_started_at)} → ${fmt(e.exposure_ended_at)}</td>
+      <td>${e.impact_assessment
+        ? tag(e.impact_assessment.decision === "release" ? "included"
+             : e.impact_assessment.decision === "exclude" ? "excluded" : "additional",
+             {release:"放行解冻",exclude:"排除",additional:"追加考察"}[e.impact_assessment.decision])
+            + `<div class="muted">${esc(e.impact_assessment.comment)}</div>`
+        : tag("frozen", "等待影响评估")}</td>
+    </tr>`).join("")
+    : `<tr><td colspan="7" class="hint">暂无环境偏离记录</td></tr>`;
+
+  // 趋势数据集
+  document.getElementById("trend").innerHTML = trend.results.length ? trend.results.map(r => `
+    <tr>
+      <td><b>${esc(r.batch_no)}</b></td>
+      <td>${esc(r.timepoint_code)} <span class="muted">(${r.offset_days}天)</span></td>
+      <td>${tag(r.kind === "scheduled" ? "pulled" : "additional", KIND[r.kind])}
+          ${r.replaces_action_id ? `<span class="muted">替代#${r.replaces_action_id}</span>` : ""}</td>
+      <td>${esc(r.assay_code)} ${esc(r.assay_name)}</td>
+      <td><b>${esc(r.value)}</b> ${esc(r.unit)}</td>
+      <td>${fmt(r.planned_at)}</td>
+      <td>${fmt(r.pulled_at)}
+          ${r.early ? '<span class="early">（提前）' : r.late ? '<span class="late">（逾窗）' : ""}
+          ${r.early || r.late ? "</span>" : ""}</td>
+      <td class="${r.pull_offset_hours > 0 ? "late" : r.pull_offset_hours < 0 ? "early" : ""}">
+          ${r.pull_offset_hours ?? "—"}</td>
+    </tr>`).join("")
+    : `<tr><td colspan="8" class="hint">暂无可用于趋势分析的数据</td></tr>`;
+}
+
+async function showTimeline(batchId, btn) {
+  document.querySelectorAll("#batch-tabs button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  const tl = await get(`batches/${batchId}/timeline/`);
+  const overdueIds = new Set();
+  // 标注逾期
+  document.getElementById("timeline").innerHTML = tl.actions.map(a => {
+    const se = a.sampling_event;
+    let tags = [];
+    tags.push(tag(a.status, a.status_display));
+    if (a.is_overdue) tags.push(tag("overdue", "已逾期"));
+    if (a.kind !== "scheduled") tags.push(tag("additional", a.kind_display));
+    if (a.freeze_reason) tags.push(tag("frozen",
+      "冻结：" + (a.freeze_reason_display || a.freeze_reason)));
+
+    const repls = (a.replacements || []).map(r => `
+      <div class="repl">↪ 替代动作 #${r.id}：样品 <code>${esc(r.sample_barcode || "未分配")}</code>
+        ，${tag(r.status, {pending:"待取样",pulled:"已取样",frozen:"冻结",void:"作废"}[r.status])}
+        ，计划 ${fmt(r.planned_at)}（原计划行保持不变）</div>`).join("");
+
+    const results = (a.results || []).map(r => {
+      let t = r.is_frozen ? tag("frozen", "结果冻结")
+             : tag(r.disposition, r.disposition_display);
+      return `<span style="margin-right:12px">${esc(r.assay_code)}=<b>${esc(r.value)}</b> ${t}</span>`;
+    }).join("");
+
+    return `
+    <div class="tl-row">
+      <div class="tl-code">${esc(a.timepoint_code)}<div class="muted" style="font-weight:400">${a.offset_days}天</div></div>
+      <div class="tl-body">
+        <div>${KIND[a.kind] ? tag(a.kind === "scheduled" ? "pending" : "additional", a.kind_display) : ""}
+             样品 <code>${esc(a.sample_barcode || "未分配")}</code></div>
+        <div class="meta">计划：${fmt(a.planned_at)} ｜ 窗口：${fmt(a.window_start)} → ${fmt(a.window_end)}</div>
+        ${se ? `<div class="meta">实际取样：<b>${fmt(se.pulled_at)}</b>（取样人 ${esc(se.pulled_by_username)}）
+                ${se.early ? '<span class="early">提前 ' + (-se.offset_from_planned_hours) + 'h</span>'
+                  : se.late ? '<span class="late">逾窗 +' + se.offset_from_planned_hours + 'h</span>'
+                  : '<span class="muted">偏差 ' + se.offset_from_planned_hours + 'h</span>'}
+                ${se.note ? "｜" + esc(se.note) : ""}</div>`
+             : a.status === "pending" ? `<div class="meta">尚未取样${a.is_overdue ? " · <span class='late'>窗口已过</span>" : ""}</div>` : ""}
+        <div class="tl-tags">${tags.join("")}</div>
+        ${a.freeze_note ? `<div class="meta">冻结说明：${esc(a.freeze_note)}</div>` : ""}
+        ${results ? `<div class="meta" style="margin-top:6px">检测结果：${results}</div>` : ""}
+        ${repls}
+      </div>
+    </div>`;
+  }).join("") || '<div class="hint">该批次暂无动作</div>';
+}
+
+load().catch(e => {
+  if (!auth) return;
+  document.getElementById("timeline").innerHTML =
+    `<div class="hint" style="color:var(--bad)">${esc(e.message)}</div>`;
+});
+</script>
+</body>
+</html>
