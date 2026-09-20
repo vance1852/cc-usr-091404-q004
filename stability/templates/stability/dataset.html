@@ -1,0 +1,46 @@
+{% extends "stability/base.html" %}
+{% block title %}可用于趋势分析的数据集{% endblock %}
+{% block content %}
+<h1>当前可用于趋势 / 货架期评估的数据集</h1>
+<div class="card">
+  仅包含质量人员<b>已纳入</b>且不存在<b>待完成影响评估</b>（断电/温度偏离/样品异常）的数据点。
+  即使已经纳入的结果，若之后暴出新的待评估偏离，也会自动撤出本数据集，直至评估关闭。<br>
+  <span class="muted">分析员只负责提交结果；纳入、排除、追加考察只能由质量人员决定。
+  实际检测时间/实际龄期与计划时间点分开列示。</span>
+</div>
+
+<div class="kpi">
+  <div class="card"><div class="num">{{ total }}</div><div class="muted">可用数据点</div></div>
+</div>
+
+<table>
+  <tr>
+    <th>批号</th><th>产品</th><th>方案版本</th><th>时间点</th>
+    <th>计划天</th><th>实际龄期(天)</th><th>样品</th>
+    <th>检测项目</th><th>结果</th><th>实际检测时间</th>
+  </tr>
+  {% for row in rows %}
+  <tr>
+    <td><a href="{% url 'batch-detail' row.batch_id %}" class="mono">{{ row.batch_number }}</a></td>
+    <td>{{ row.product }}</td>
+    <td class="mono">{{ row.protocol }}</td>
+    <td class="mono">{{ row.point_code }}</td>
+    <td>{{ row.planned_day }}</td>
+    <td>
+      <b {% if row.actual_age_days != row.planned_day %}style="color:var(--amber)"{% endif %}>
+        {{ row.actual_age_days }}</b>
+      {% if row.actual_age_days != row.planned_day %}
+      <span class="muted">(Δ{{ row.delta_days }})</span>{% endif %}
+    </td>
+    <td class="mono">{{ row.sample_barcode }}
+      {% if row.is_substitute %}<span class="pill purple">替代来源</span>{% endif %}</td>
+    <td>{{ row.test_item }}<div class="muted">{{ row.test_item_name }}</div></td>
+    <td><b>{{ row.value|default:row.value_text }}</b> {{ row.unit }}</td>
+    <td class="mono">{{ row.analyzed_at|date:"Y-m-d H:i" }}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="10" class="muted">
+    暂时没有同时满足「质量已纳入 + 无待评估偏离」的数据点。请先完成检测、质量判定与影响评估。</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

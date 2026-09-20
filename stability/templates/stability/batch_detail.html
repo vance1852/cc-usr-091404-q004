@@ -1,0 +1,220 @@
+{% extends "stability/base.html" %}
+{% block title %}{{ batch.batch_number }} · 批次时间轴{% endblock %}
+{% block content %}
+<p><a href="{% url 'dashboard' %}">← 返回总览</a></p>
+<h1>批号 {{ batch.batch_number }}
+  <span class="muted" style="font-size:13px">{{ batch.product_name }}</span></h1>
+
+<div class="card">
+  <b>方案版本：</b><span class="mono">{{ batch.protocol.code }} v{{ batch.protocol.version }}
+    （{{ batch.protocol.get_status_display }}）</span> ｜
+  <b>储存条件：</b>{{ batch.storage_condition.code }} ({{ batch.storage_condition.label }}) ｜
+  <b>恒温箱：</b>{{ batch.chamber.code }} ｜
+  <b>考察零点（入库）：</b><span class="mono">{{ batch.storage_start|date:"Y-m-d H:i" }}</span>
+  <div class="muted" style="margin-top:4px">
+    计划时间与实际时间严格分开显示；时间轴中
+    <span class="actual-tag">绿色标记</span>为实际发生时间，绝不回填为计划时间。
+  </div>
+</div>
+
+{% if overdue %}
+<h2 style="border-color:var(--red)">逾期动作（{{ overdue|length }}）</h2>
+<table>
+  <tr><th>时间点</th><th>检测项目</th><th>窗口截止</th><th>当前状态</th><th>问题</th>
+      {% if is_coordinator %}<th>协调员操作</th>{% endif %}</tr>
+  {% for v in overdue %}
+  <tr>
+    <td class="mono">{{ v.point_code }}</td>
+    <td>{{ v.test_item_code }} <span class="muted">{{ v.test_item_name }}</span></td>
+    <td class="mono">{{ v.window_end|date:"Y-m-d H:i" }}</td>
+    <td><span class="pill red">{{ v.state_display }}</span>
+        {% if v.sample %}<div class="muted mono">{{ v.sample.barcode }}{% if v.role == 'substitute' %}（替代样品）{% endif %}</div>{% endif %}</td>
+    <td>
+      {% if v.timing == 'late' %}<span class="pill red">逾期取出</span>{% endif %}
+      {% if v.frozen %}{% for r in v.freeze_reasons %}<div class="freeze">{{ r }}</div>{% endfor %}{% endif %}
+      {% if v.needs_substitute %}<span class="pill amber">需要替代样品</span>{% endif %}
+    </td>
+    {% if is_coordinator %}
+    <td>
+      {% if v.can_substitute %}
+      <form class="row-form" onsubmit="event.preventDefault();
+        submitForm(this, '/api/actions/{{ v.action.id }}/substitute/',
+        fd => ({sample_barcode: fd.get('barcode'), reason: fd.get('reason'), note: fd.get('note')}),
+        '替代样品已安排（原计划不变）')">
+        <select name="barcode" required>
+          <option value="">选择在箱样品…</option>
+          {% for s in samples_available %}<option value="{{ s.barcode }}">{{ s.barcode }}</option>{% endfor %}
+        </select>
+        <select name="reason">
+          {% for code, label in sub_reasons %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+        <input name="note" placeholder="说明（可选）" size="14">
+        <button class="primary" type="submit">安排替代</button>
+      </form>
+      {% endif %}
+    </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<h2>时间轴</h2>
+<ul class="timeline">
+  {% for item in timeline %}
+  <li class="k-{{ item.kind }}">
+    <span class="mono muted">{{ item.at|date:"Y-m-d H:i" }}</span>
+    {{ item.label }}
+    {% if item.actual %}<span class="actual-tag">● 实际</span>{% endif %}
+    {% if item.pending %}<span class="pending-tag">⏳ 待影响评估（相关结果冻结）</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+
+<h2>按时间点的取样与检测编排</h2>
+{% for point_code, views in points.items %}
+<details open>
+  <summary>{{ point_code }} · 计划 {{ views.0.planned_datetime|date:"Y-m-d H:i" }}
+    <span class="muted">（窗口 {{ views.0.window_start|date:"m-d H:i" }} ~ {{ views.0.window_end|date:"m-d H:i" }}）</span>
+  </summary>
+  <table>
+    <tr><th>检测项目</th><th>样品 / 替代来源</th><th>状态</th><th>实际取样与检测</th>
+        <th>冻结 / 偏离</th>
+        <th>操作</th></tr>
+    {% for v in views %}
+    <tr>
+      <td>{{ v.test_item_code }}<div class="muted">{{ v.test_item_name }}</div></td>
+      <td>
+        {% if v.assignment %}
+          <span class="mono">{{ v.sample.barcode }}</span>
+          {% if v.role == 'substitute' %}
+            <span class="pill purple">替代样品</span>
+            <div class="muted">接替：<span class="mono">{{ v.assignment.substitutes.sample.barcode|default:"原样品" }}</span>
+              （{{ v.assignment.get_reason_display }}）</div>
+          {% else %}<span class="pill blue">原计划样品</span>{% endif %}
+        {% else %}<span class="muted">未分配</span>{% endif %}
+      </td>
+      <td><span class="pill
+          {% if v.state == 'included' %}green{% elif v.state == 'excluded' %}red{% elif v.state == 'additional' %}purple{% elif v.frozen %}amber{% else %}gray{% endif %}">
+          {{ v.state_display }}</span>
+        {% if v.timing != 'not_withdrawn' %}<div class="muted">{{ v.timing_display }}</div>{% endif %}
+      </td>
+      <td>
+        {% if v.sample.withdrawn_at %}
+          取出：<span class="mono">{{ v.sample.withdrawn_at|date:"Y-m-d H:i" }}</span>
+          <span class="actual-tag">实际</span><br>
+        {% endif %}
+        {% if v.result %}
+          检测：<b>{{ v.result.value|default:v.result.value_text }}</b> {{ v.result.unit }}
+          <span class="mono muted">{{ v.result.analyzed_at|date:"Y-m-d H:i" }}</span>
+          <span class="actual-tag">实际</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if v.freeze %}{% for r in v.freeze_reasons %}<div class="freeze">{{ r }}</div>{% endfor %}{% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td>
+        {% if is_coordinator and v.state == 'open' %}
+        <form class="row-form" onsubmit="event.preventDefault();
+          submitForm(this, '/api/actions/{{ v.action.id }}/assign/',
+          fd => ({sample_barcode: fd.get('barcode')}), '原计划样品已分配')">
+          <select name="barcode" required>
+            <option value="">选择在箱样品…</option>
+            {% for s in samples_available %}<option value="{{ s.barcode }}">{{ s.barcode }}</option>{% endfor %}
+          </select>
+          <button class="primary" type="submit">分配</button>
+        </form>
+        {% endif %}
+
+        {% if is_coordinator and v.can_withdraw %}
+        <form class="row-form" onsubmit="event.preventDefault();
+          submitForm(this, '/api/assignments/{{ v.assignment.id }}/withdraw/',
+          fd => ({withdrawn_at: fd.get('t') || undefined}), '实际取出时间已登记')">
+          <input name="t" type="datetime-local" required>
+          <button type="submit">登记取出（实际时间）</button>
+        </form>
+        {% endif %}
+
+        {% if is_analyst and v.can_submit_result %}
+        <form class="row-form" onsubmit="event.preventDefault();
+          submitForm(this, '/api/assignments/{{ v.assignment.id }}/results/',
+          fd => ({value: fd.get('value'), value_text: fd.get('value_text'), analyzed_at: fd.get('t') || undefined}),
+          '检测结果已提交，待质量判定')">
+          <input name="value" placeholder="数值" size="8">
+          <input name="value_text" placeholder="或文字结果" size="10">
+          <input name="t" type="datetime-local" required>
+          <button class="primary" type="submit">分析员提交结果</button>
+        </form>
+        {% endif %}
+
+        {% if is_qa and v.result and v.result.qa_status == 'pending' %}
+          {% if v.frozen %}
+          <div class="freeze">冻结中：影响评估完成前不能「纳入/追加」；可先「排除」。</div>
+          {% endif %}
+          <form class="inline" onsubmit="event.preventDefault();
+            submitForm(this, '/api/results/{{ v.result.id }}/decision/',
+            fd => ({qa_status: 'included'}), '已纳入')">
+            <button class="primary" type="submit" {% if v.frozen %}disabled title="冻结中"{% endif %}>纳入</button></form>
+          <form class="inline" onsubmit="event.preventDefault();
+            submitForm(this, '/api/results/{{ v.result.id }}/decision/',
+            fd => ({qa_status: 'excluded'}), '已排除')">
+            <button class="danger" type="submit">排除</button></form>
+          <form class="inline" onsubmit="event.preventDefault();
+            submitForm(this, '/api/results/{{ v.result.id }}/decision/',
+            fd => ({qa_status: 'additional'}), '已标记追加考察')">
+            <button type="submit" {% if v.frozen %}disabled title="冻结中"{% endif %}>追加考察</button></form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</details>
+{% endfor %}
+
+<h2>样品与偏离暴露时长</h2>
+<table>
+  <tr><th>条码</th><th>状态</th><th>实际取出时间</th><th>经历的环境事件与暴露时长</th>
+      <th>待评估暴露合计</th>
+      {% if is_coordinator %}<th>登记异常</th>{% endif %}</tr>
+  {% for row in sample_rows %}
+  <tr>
+    <td class="mono">{{ row.sample.barcode }}</td>
+    <td><span class="pill
+        {% if row.sample.status == 'consumed' %}gray{% elif row.sample.status == 'damaged' or row.sample.status == 'misplaced' %}red{% elif row.sample.status == 'withdrawn' %}green{% else %}blue{% endif %}">
+        {{ row.sample.get_status_display }}</span></td>
+    <td>{% if row.sample.withdrawn_at %}<span class="mono">{{ row.sample.withdrawn_at|date:"Y-m-d H:i" }}</span> <span class="actual-tag">实际</span>{% else %}—{% endif %}</td>
+    <td>
+      {% for ex in row.exposures %}
+        <div>{{ ex.event.get_event_type_display }}
+          {{ ex.event.started_at|date:"m-d H:i" }}~{% if ex.event.ended_at %}{{ ex.event.ended_at|date:"m-d H:i" }}{% else %}进行中{% endif %}
+          ：<b>{{ ex.exposure_display }}</b>
+          {% if ex.event.pending %}<span class="pending-tag">待评估</span>
+          {% else %}<span class="pill green">{{ ex.event.get_status_display }}</span>{% endif %}
+        </div>
+      {% empty %}<span class="muted">无暴露</span>{% endfor %}
+      {% for x in row.sample.exceptions.all %}
+        <div class="freeze" style="display:inline-block">{{ x.get_kind_display }}
+          {% if x.pending %}（待评估）{% else %}（{{ x.get_disposition_display }}）{% endif %}</div>
+      {% endfor %}
+    </td>
+    <td>{% if row.pending_seconds %}<span class="pill red">{{ row.pending_display }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+    {% if is_coordinator %}
+    <td>
+      <form class="row-form" onsubmit="event.preventDefault();
+        submitForm(this, '/api/samples/{{ row.sample.id }}/exceptions/',
+        fd => ({kind: fd.get('kind'), occurred_at: fd.get('t') || undefined, note: fd.get('note')}),
+        '异常已登记，相关结果冻结')">
+        <select name="kind">
+          {% for code, label in exc_kinds %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+        <input name="t" type="datetime-local">
+        <input name="note" placeholder="说明" size="10">
+        <button class="danger" type="submit"
+          {% if row.sample.terminal %}disabled title="终态样品不可重复操作"{% endif %}>登记</button>
+      </form>
+    </td>
+    {% endif %}
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

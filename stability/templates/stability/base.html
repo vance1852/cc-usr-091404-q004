@@ -1,0 +1,149 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}疫苗稳定性试验编排平台{% endblock %}</title>
+<style>
+  :root {
+    --ink:#1f2933; --muted:#697586; --line:#d9e0e6; --bg:#f4f6f8;
+    --blue:#1f66b0; --blue-bg:#e8f1fa;
+    --red:#b3261e; --red-bg:#fdecea;
+    --amber:#9a6700; --amber-bg:#fff4d6;
+    --green:#1e6b3a; --green-bg:#e6f4ea;
+    --purple:#6a3db4; --purple-bg:#f0e9fb;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+         color:var(--ink); background:var(--bg); font-size:14px; }
+  header { background:#10334f; color:#fff; padding:10px 20px; display:flex;
+           align-items:center; gap:18px; flex-wrap:wrap; }
+  header a.brand { color:#fff; font-weight:700; text-decoration:none; font-size:16px; }
+  header nav a { color:#cfe0ef; text-decoration:none; margin-right:14px; }
+  header nav a:hover { color:#fff; }
+  header .spacer { flex:1; }
+  .badge { display:inline-block; padding:1px 8px; border-radius:10px;
+           font-size:12px; margin-left:4px; }
+  .badge.coord { background:#2f72b8; }
+  .badge.analyst { background:#3f8f5b; }
+  .badge.qa { background:#a45a16; }
+  main { max-width:1200px; margin:18px auto; padding:0 16px 60px; }
+  h1 { font-size:20px; } h2 { font-size:16px; margin-top:28px;
+       border-left:4px solid var(--blue); padding-left:8px; }
+  table { border-collapse:collapse; width:100%; background:#fff; margin:8px 0; }
+  th, td { border:1px solid var(--line); padding:6px 9px; text-align:left;
+           vertical-align:top; }
+  th { background:#eef2f6; font-weight:600; }
+  tr:nth-child(even) td { background:#fafbfc; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px;
+          padding:14px 16px; margin:12px 0; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px;
+          font-size:12px; white-space:nowrap; }
+  .pill.gray { background:#eef1f4; color:#445; }
+  .pill.blue { background:var(--blue-bg); color:var(--blue); }
+  .pill.red { background:var(--red-bg); color:var(--red); }
+  .pill.amber { background:var(--amber-bg); color:var(--amber); }
+  .pill.green { background:var(--green-bg); color:var(--green); }
+  .pill.purple { background:var(--purple-bg); color:var(--purple); }
+  button, .btn { font:inherit; padding:4px 12px; border-radius:5px;
+          border:1px solid var(--blue); background:#fff; color:var(--blue);
+          cursor:pointer; }
+  button.primary { background:var(--blue); color:#fff; }
+  button.danger { border-color:var(--red); color:var(--red); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input, select, textarea { font:inherit; padding:4px 7px; border:1px solid var(--line);
+          border-radius:4px; max-width:100%; }
+  form.inline { display:inline; }
+  .row-form { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:4px 0; }
+  .muted { color:var(--muted); }
+  .mono { font-family:ui-monospace,Menlo,Consolas,monospace; }
+  .freeze { background:var(--red-bg); border-left:4px solid var(--red);
+            padding:6px 10px; margin:6px 0; border-radius:0 4px 4px 0; }
+  .msg { position:fixed; right:20px; bottom:20px; max-width:420px; z-index:50; }
+  .msg div { padding:10px 14px; border-radius:6px; margin-top:8px; color:#fff;
+             box-shadow:0 2px 8px rgba(0,0,0,.25); }
+  .msg .ok { background:var(--green); } .msg .err { background:var(--red); }
+  .timeline { list-style:none; padding-left:22px; border-left:2px solid var(--line);
+              margin:10px 0; }
+  .timeline li { position:relative; padding:4px 0 4px 14px; }
+  .timeline li::before { content:""; position:absolute; left:-27px; top:9px;
+              width:10px; height:10px; border-radius:50%; background:#fff;
+              border:2px solid var(--muted); }
+  .timeline li.k-start::before { border-color:var(--blue); background:var(--blue); }
+  .timeline li.k-planned::before { border-color:var(--blue); }
+  .timeline li.k-event_start::before, .timeline li.k-event_end::before
+              { border-color:var(--red); }
+  .timeline li.k-withdrawal::before { border-color:var(--green); background:var(--green); }
+  .timeline li.k-result::before { border-color:var(--purple); }
+  .timeline li.k-assignment::before { border-color:var(--amber); }
+  .timeline li.k-exception::before { border-color:var(--red); background:var(--red); }
+  .actual-tag { font-size:11px; color:var(--green); }
+  .pending-tag { font-size:11px; color:var(--red); font-weight:600; }
+  details summary { cursor:pointer; font-weight:600; padding:4px 0; }
+  .kpi { display:flex; gap:12px; flex-wrap:wrap; }
+  .kpi .card { flex:1; min-width:150px; text-align:center; }
+  .kpi .num { font-size:26px; font-weight:700; }
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="{% url 'dashboard' %}">🦠 疫苗稳定性试验编排平台</a>
+  <nav>
+    <a href="{% url 'dashboard' %}">总览</a>
+    <a href="{% url 'events' %}">箱体与环境事件</a>
+    <a href="{% url 'dataset-page' %}">可用于趋势分析的数据集</a>
+  </nav>
+  <div class="spacer"></div>
+  {% if user.is_authenticated %}
+    <span>{{ user.username }}
+      {% if is_coordinator %}<span class="badge coord">协调员</span>{% endif %}
+      {% if is_analyst %}<span class="badge analyst">分析员</span>{% endif %}
+      {% if is_qa %}<span class="badge qa">质量</span>{% endif %}
+    </span>
+    <form class="inline" method="post" action="{% url 'logout' %}">
+      {% csrf_token %}<button type="submit">退出</button>
+    </form>
+  {% else %}
+    <a href="{% url 'login' %}">登录</a>
+  {% endif %}
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<div class="msg" id="msg"></div>
+<script>
+const CSRF = (document.cookie.match(/csrftoken=([^;]+)/) || [,""])[1];
+async function apiPost(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {"Content-Type": "application/json", "X-CSRFToken": CSRF},
+    body: JSON.stringify(body || {}),
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const detail = (data && (data.detail || data.error)) || ("HTTP " + res.status);
+    throw new Error(detail);
+  }
+  return data;
+}
+function toast(text, ok) {
+  const box = document.getElementById("msg");
+  const el = document.createElement("div");
+  el.className = ok ? "ok" : "err";
+  el.textContent = text;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+async function submitForm(form, url, bodyBuilder, doneMsg) {
+  try {
+    await apiPost(url, bodyBuilder(new FormData(form)));
+    toast(doneMsg || "操作成功", true);
+    setTimeout(() => location.reload(), 500);
+  } catch (e) { toast(e.message, false); }
+}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

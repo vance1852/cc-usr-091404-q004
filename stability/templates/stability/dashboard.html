@@ -1,0 +1,73 @@
+{% extends "stability/base.html" %}
+{% block title %}总览 · 稳定性编排{% endblock %}
+{% block content %}
+<h1>稳定性考察总览 <span class="muted" style="font-size:13px">数据时间 {{ now|date:"Y-m-d H:i" }} UTC</span></h1>
+
+<div class="kpi">
+  <div class="card"><div class="num">{{ rows|length }}</div><div class="muted">在管批次</div></div>
+  <div class="card"><div class="num" style="color:var(--red)">
+    {{ pending_events|length }}</div><div class="muted">待评估环境事件</div></div>
+  <div class="card"><div class="num" style="color:var(--red)">{{ pending_exceptions|length }}</div><div class="muted">待评估样品异常</div></div>
+</div>
+
+<h2>各批次状态</h2>
+<table>
+  <tr>
+    <th>批号 / 产品</th><th>方案版本</th><th>储存条件 / 恒温箱</th>
+    <th>入库时间</th><th>逾期动作</th><th>冻结动作</th>
+    <th>待评估偏离暴露</th><th>当前可用结果数</th><th></th>
+  </tr>
+  {% for r in rows %}
+  <tr>
+    <td><a href="{% url 'batch-detail' r.batch.id %}"><b>{{ r.batch.batch_number }}</b></a>
+        <div class="muted">{{ r.batch.product_name }}</div></td>
+    <td class="mono">{{ r.batch.protocol.code }} v{{ r.batch.protocol.version }}</td>
+    <td>{{ r.batch.storage_condition.code }}<br><span class="muted">{{ r.batch.chamber.code }}</span></td>
+    <td class="mono">{{ r.batch.storage_start|date:"Y-m-d H:i" }}</td>
+    <td>{% if r.overdue_count %}<span class="pill red">{{ r.overdue_count }} 项逾期</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{% if r.frozen_count %}<span class="pill amber">{{ r.frozen_count }} 项冻结</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{% if r.pending_exposure_seconds %}<span class="pill red">{{ r.pending_exposure_display }}</span>{% else %}<span class="muted">无待评估暴露</span>{% endif %}</td>
+    <td><span class="pill green">{{ r.usable_count }}</span></td>
+    <td><a href="{% url 'batch-detail' r.batch.id %}">时间轴 / 编排 →</a></td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="9" class="muted">尚无批次。使用 seed 管理命令或 API 创建方案与批次。</td></tr>
+  {% endfor %}
+</table>
+
+<div style="display:flex; gap:24px; flex-wrap:wrap">
+  <div style="flex:1; min-width:360px">
+    <h2>待评估环境事件（冻结相关结果）</h2>
+    <table>
+      <tr><th>恒温箱</th><th>类型</th><th>开始</th><th>结束</th><th>状态</th></tr>
+      {% for e in pending_events %}
+      <tr>
+        <td>{{ e.chamber.code }}</td>
+        <td>{{ e.get_event_type_display }}</td>
+        <td class="mono">{{ e.started_at|date:"m-d H:i" }}</td>
+        <td class="mono">{% if e.ended_at %}{{ e.ended_at|date:"m-d H:i" }}{% else %}进行中{% endif %}</td>
+        <td><span class="pill red">{{ e.get_status_display }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="muted">无</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  <div style="flex:1; min-width:360px">
+    <h2>待评估样品异常</h2>
+    <table>
+      <tr><th>样品</th><th>批次</th><th>类型</th><th>发生时间</th></tr>
+      {% for x in pending_exceptions %}
+      <tr>
+        <td class="mono">{{ x.sample.barcode }}</td>
+        <td><a href="{% url 'batch-detail' x.sample.batch.id %}">{{ x.sample.batch.batch_number }}</a></td>
+        <td>{{ x.get_kind_display }}</td>
+        <td class="mono">{{ x.occurred_at|date:"m-d H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="muted">无</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

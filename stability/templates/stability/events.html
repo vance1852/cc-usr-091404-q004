@@ -1,0 +1,78 @@
+{% extends "stability/base.html" %}
+{% block title %}箱体与环境事件{% endblock %}
+{% block content %}
+<h1>恒温箱与环境事件</h1>
+
+{% if is_coordinator %}
+<h2>登记环境事件（断电 / 温度偏离…）</h2>
+<div class="card">
+<form class="row-form" onsubmit="event.preventDefault();
+  submitForm(this, '/api/events/',
+  fd => ({chamber_id: Number(fd.get('chamber_id')), event_type: fd.get('event_type'),
+         started_at: fd.get('started_at') || undefined,
+         ended_at: fd.get('ended_at') || null,
+         observed_min_temp_c: fd.get('min_t') || null,
+         observed_max_temp_c: fd.get('max_t') || null,
+         description: fd.get('description')}),
+  '事件已登记：评估完成前相关批次结果冻结')">
+  <select name="chamber_id" required>
+    <option value="">选择恒温箱</option>
+    {% for c in chambers %}<option value="{{ c.id }}">{{ c.code }} {{ c.name }}</option>{% endfor %}
+  </select>
+  <select name="event_type">
+    {% for code, label in event_types %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+  </select>
+  <label>开始 <input name="started_at" type="datetime-local" required></label>
+  <label>结束 <input name="ended_at" type="datetime-local"></label>
+  <input name="min_t" placeholder="最低℃" size="7">
+  <input name="max_t" placeholder="最高℃" size="7">
+  <input name="description" placeholder="描述" size="22">
+  <button class="primary" type="submit">登记事件</button>
+</form>
+</div>
+{% endif %}
+
+<h2>事件清单</h2>
+<table>
+  <tr><th>恒温箱</th><th>类型</th><th>开始</th><th>结束</th><th>实测温度</th>
+      <th>评估状态</th><th>说明</th>{% if is_qa %}<th>质量影响评估</th>{% endif %}</tr>
+  {% for e in events %}
+  <tr>
+    <td>{{ e.chamber.code }}</td>
+    <td>{{ e.get_event_type_display }}</td>
+    <td class="mono">{{ e.started_at|date:"Y-m-d H:i" }}</td>
+    <td class="mono">{% if e.ended_at %}{{ e.ended_at|date:"Y-m-d H:i" }}{% else %}<span class="pill red">进行中</span>{% endif %}</td>
+    <td class="mono">{% if e.observed_min_temp_c or e.observed_max_temp_c %}
+      {{ e.observed_min_temp_c|default:"-" }} ~ {{ e.observed_max_temp_c|default:"-" }} ℃{% else %}—{% endif %}</td>
+    <td>
+      {% if e.pending %}<span class="pill red">{{ e.get_status_display }}</span>
+      {% elif e.status == 'impact' %}<span class="pill amber">{{ e.get_status_display }}</span>
+      {% else %}<span class="pill green">{{ e.get_status_display }}</span>{% endif %}
+      {% if e.assessment_note %}<div class="muted">{{ e.assessment_note }}</div>{% endif %}
+    </td>
+    <td class="muted">{{ e.description }}</td>
+    {% if is_qa %}
+    <td>
+      <form class="inline" onsubmit="event.preventDefault();
+        submitForm(this, '/api/events/{{ e.id }}/assess/',
+        fd => ({assessment: 'no_impact', note: fd.get('note')}), '已评估：无影响')">
+        <button type="submit">无影响</button></form>
+      <form class="inline" onsubmit="event.preventDefault();
+        submitForm(this, '/api/events/{{ e.id }}/assess/',
+        fd => ({assessment: 'impact', note: fd.get('note')}), '已评估：有影响')">
+        <button class="danger" type="submit">有影响</button></form>
+      <form class="inline" onsubmit="event.preventDefault();
+        submitForm(this, '/api/events/{{ e.id }}/assess/',
+        fd => ({assessment: 'under_review', note: fd.get('note')}), '标记为评估中')">
+        <button type="submit">评估中</button></form>
+      <input name="note" placeholder="评估说明" style="width:110px">
+    </td>
+    {% endif %}
+  </tr>
+  {% empty %}
+  <tr><td colspan="8" class="muted">尚无环境事件。</td></tr>
+  {% endfor %}
+</table>
+<p class="muted">规则：事件处于「待评估 / 评估中」时，事件期间在箱样品的检测结果一律冻结，质量人员不能纳入；
+评估为「无影响」后解除冻结，评估为「有影响」时相关结果应由质量人员排除并安排追加考察。</p>
+{% endblock %}

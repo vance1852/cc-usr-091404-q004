@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-hans">
+<head>
+<meta charset="utf-8">
+<title>登录 · 疫苗稳定性试验编排平台</title>
+<style>
+  body { font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+         background:#10334f; margin:0; height:100vh;
+         display:flex; align-items:center; justify-content:center; }
+  .box { background:#fff; border-radius:10px; padding:28px 30px; width:340px;
+         box-shadow:0 10px 40px rgba(0,0,0,.3); }
+  h1 { font-size:17px; margin:0 0 4px; }
+  p.sub { color:#697586; font-size:13px; margin:0 0 18px; }
+  label { display:block; font-size:13px; margin:10px 0 3px; }
+  input { width:100%; padding:7px 9px; border:1px solid #cfd8e0;
+          border-radius:5px; font-size:14px; }
+  button { width:100%; margin-top:18px; padding:9px; border:0; border-radius:5px;
+           background:#1f66b0; color:#fff; font-size:14px; cursor:pointer; }
+  .error { background:#fdecea; color:#b3261e; padding:7px 10px; border-radius:5px;
+           font-size:13px; margin-bottom:10px; }
+  .hint { font-size:12px; color:#697586; margin-top:14px; line-height:1.7; }
+  code { background:#eef2f6; padding:1px 5px; border-radius:3px; }
+</style>
+</head>
+<body>
+<form class="box" method="post">
+  <h1>🦠 疫苗稳定性试验编排平台</h1>
+  <p class="sub">请使用分配的角色账号登录</p>
+  {% if form.errors %}
+    <div class="error">用户名或密码不正确，请重试。</div>
+  {% endif %}
+  {% csrf_token %}
+  <label>用户名</label>
+  {{ form.username }}
+  <label>密码</label>
+  {{ form.password }}
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit">登录</button>
+  <div class="hint">
+    演示账号（密码同用户名）：<br>
+    <code>coord</code> 协调员 ｜ <code>analyst</code> 分析员 ｜ <code>qa</code> 质量人员
+  </div>
+</form>
+</body>
+</html>
